@@ -139,8 +139,7 @@ bot.command('help', async (ctx) => {
 })
 
 // ─── Inline query — share Forge with a friend ─────────────────────────────────
-// When user types @ForgeBot in any chat, they can share their referral
-bot.inlineQuery(/.*/, async (ctx) => {
+bot.on('inline_query', async (ctx) => {
   const query = ctx.inlineQuery.query || ''
   await ctx.answerInlineQuery([
     {
@@ -293,24 +292,4 @@ if (WEBHOOK_MODE) {
       'message', 'inline_query', 'pre_checkout_query', 'callback_query',
     ],
   })
-}
-const isProduction = !!process.env.WEBHOOK_DOMAIN
-
-if (isProduction) {
-  const domain = process.env.WEBHOOK_DOMAIN
-  const secretPath = /webhook/${WEBHOOK_SECRET}
-
-  const server = createServer(
-    webhookCallback(bot, 'http')
-  )
-
-  server.listen(PORT, async () => {
-    console.log(`Server running on port ${PORT}`)
-
-    await bot.api.setWebhook(`${domain}${secretPath}`)
-    console.log('Webhook set!')
-  })
-} else {
-  console.log('Running in polling mode...')
-  bot.start()
 }
