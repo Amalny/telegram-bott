@@ -1,11 +1,17 @@
 {
-  "name": "forge-telegram-bot",
+  "name": "forge-telegram-bott",
   "version": "1.0.0",
   "type": "module",
+
+  "engines": {
+    "node": ">=20"
+  },
+
   "scripts": {
     "start": "node src/bot.js",
     "dev": "node --watch src/bot.js"
   },
+
   "dependencies": {
     "grammy": "^1.26.0",
     "dotenv": "^16.4.5",
