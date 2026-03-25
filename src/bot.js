@@ -1,60 +1,36 @@
 // src/bot.js — Forge Telegram Bot
-// Web Service on Render free tier — HTTP server keeps it alive, polling runs alongside.
+// All buttons use t.me deep links — the ONLY method that guarantees fullscreen.
+// webApp() inline buttons open as a card. t.me links always open fullscreen.
 
 import { Bot, InlineKeyboard } from 'grammy'
 import { createServer } from 'http'
 import 'dotenv/config'
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-const BOT_TOKEN  = process.env.BOT_TOKEN   || '8629852173:AAEYP-nf_XZYCs7oKKm-gFayUqZIiIBA2KM'
-const BOT_NAME   = process.env.BOT_USERNAME || 'Forgeminebot'
-const APP_URL    = process.env.MINI_APP_URL || 'https://glowing-sundae-ed61bd.netlify.app'
-const API_URL    = process.env.API_URL      || ''
-const PORT       = parseInt(process.env.PORT || '3000')
+const BOT_TOKEN = process.env.BOT_TOKEN    || '8629852173:AAEYP-nf_XZYCs7oKKm-gFayUqZIiIBA2KM'
+const BOT_NAME  = process.env.BOT_USERNAME || 'Forgeminebot'
+const APP_URL   = process.env.MINI_APP_URL || 'https://glowing-sundae-ed61bd.netlify.app'
+const API_URL   = process.env.API_URL      || ''
+const PORT      = parseInt(process.env.PORT || '3000')
 
 const bot = new Bot(BOT_TOKEN)
 
-// ─── Tiny HTTP server — satisfies Render's port requirement ───────────────────
+// ─── Keep Render Web Service alive ───────────────────────────────────────────
 createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' })
   res.end('Forge Bot OK')
 }).listen(PORT, () => console.log(`Health check on port ${PORT}`))
 
-// ─── FULLSCREEN LAUNCH ────────────────────────────────────────────────────────
-// There are TWO ways to open a Mini App button in Telegram:
-//
-//   1. InlineKeyboard.webApp(text, url)
-//      → Opens the URL as a Mini App BUT respects the user's Telegram version.
-//        On older Telegram it shows as a card. On newer it honours BotFather mode.
-//
-//   2. Direct t.me link as a regular URL button
-//      → t.me/BotName/appshortname  — this is the GUARANTEED fullscreen path.
-//        Telegram ALWAYS opens t.me deep links in fullscreen Mini App mode.
-//        This is what Notcoin, Hamster Kombat etc. all use.
-//
-// We use BOTH: webApp() button + a t.me deep link button below it.
-// The webApp() button is picked up by new Telegram.
-// The t.me link is the fallback that always works.
-
-function launchBtn(text = 'Open Forge', startParam = '') {
-  const tmeUrl = startParam
+// ─── THE ONLY BUTTON THAT OPENS FULLSCREEN ────────────────────────────────────
+// t.me deep link → Telegram always opens it as a fullscreen Mini App.
+// startapp param carries referral codes or any context needed.
+function btn(text, startParam = '') {
+  const url = startParam
     ? `https://t.me/${BOT_NAME}?startapp=${encodeURIComponent(startParam)}`
     : `https://t.me/${BOT_NAME}`
-
-  // webApp button — fullscreen on Telegram 8.0+
-  return new InlineKeyboard()
-    .webApp(text, APP_URL)
+  return new InlineKeyboard().url(text, url)
 }
 
-// t.me deep link — always opens fullscreen regardless of Telegram version
-function deepLinkBtn(text = '⛏ Open Forge (tap if above doesn\'t work)', startParam = '') {
-  const tmeUrl = startParam
-    ? `https://t.me/${BOT_NAME}?startapp=${encodeURIComponent(startParam)}`
-    : `https://t.me/${BOT_NAME}`
-  return new InlineKeyboard().url(text, tmeUrl)
-}
-
-// ─── /start ───────────────────────────────────────────────────────────────────
+// ─── /start ──────────────────────────────────────────────────────────────────
 bot.command('start', async (ctx) => {
   const param = ctx.match || ''
   const name  = ctx.from?.first_name || 'Miner'
@@ -62,84 +38,85 @@ bot.command('start', async (ctx) => {
     `⛏ Welcome to FORGE, ${name}!\n\n` +
     `Mine FRG tokens before the next halving cuts the rate in half.\n\n` +
     `Early miners always earn the most.\n\nTap below to launch:`,
-    {
-      reply_markup: new InlineKeyboard()
-        .webApp('⛏ Launch Forge', APP_URL)
-        .row()
-        .url('🔗 Open via Telegram link', `https://t.me/${BOT_NAME}?startapp=${param || 'start'}`)
-    }
+    { reply_markup: btn('⛏ Launch Forge', param || 'start') }
   )
 })
 
-// ─── All other commands — same double-button pattern ─────────────────────────
+// ─── /mine ───────────────────────────────────────────────────────────────────
 bot.command('mine', async (ctx) => {
-  await ctx.reply(`Start earning FRG — open Forge and tap Mine.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('⛏ Mine Now', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+  await ctx.reply(
+    `Start earning FRG — open Forge and tap Mine.`,
+    { reply_markup: btn('⛏ Mine Now') }
+  )
 })
 
+// ─── /balance ────────────────────────────────────────────────────────────────
 bot.command('balance', async (ctx) => {
-  await ctx.reply(`Check your live FRG balance inside Forge.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('💰 Check Balance', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+  await ctx.reply(
+    `Check your live FRG balance inside Forge.`,
+    { reply_markup: btn('💰 Check Balance') }
+  )
 })
 
+// ─── /refer ──────────────────────────────────────────────────────────────────
 bot.command('refer', async (ctx) => {
   await ctx.reply(
-    `Invite friends and earn 10% of everything they mine — forever.\n\nGet your referral link inside Forge.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('👥 Refer & Earn', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+    `Invite friends and earn 10% of everything they mine — forever.\n\nGet your referral link inside Forge.`,
+    { reply_markup: btn('👥 Refer & Earn') }
+  )
 })
 
+// ─── /store ──────────────────────────────────────────────────────────────────
 bot.command('store', async (ctx) => {
-  await ctx.reply(`Unlock Auto-Mine, Speed Boosts, and FRG packs. Pay with TON or Stars.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('💎 Open Store', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+  await ctx.reply(
+    `Unlock Auto-Mine, Speed Boosts, and FRG packs. Pay with TON or Stars.`,
+    { reply_markup: btn('💎 Open Store') }
+  )
 })
 
+// ─── /upgrade ────────────────────────────────────────────────────────────────
 bot.command('upgrade', async (ctx) => {
-  await ctx.reply(`Boost your FRG/s with Neural Boost, Plasma Array, Dark Matter and more.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('⚡ Manage Upgrades', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+  await ctx.reply(
+    `Boost your FRG/s with Neural Boost, Plasma Array, Dark Matter and more.`,
+    { reply_markup: btn('⚡ Manage Upgrades') }
+  )
 })
 
+// ─── /halving ────────────────────────────────────────────────────────────────
 bot.command('halving', async (ctx) => {
   await ctx.reply(
-    `When user milestones hit, the mining rate halves.\n\nYour earned FRG is always safe — only future rates halve.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('📉 Halving Status', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+    `When user milestones hit, the mining rate halves.\n\nYour earned FRG is always safe — only future rates halve.`,
+    { reply_markup: btn('📉 Halving Status') }
+  )
 })
 
+// ─── /leaderboard ────────────────────────────────────────────────────────────
 bot.command('leaderboard', async (ctx) => {
-  await ctx.reply(`See the top miners in the Forge network.`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('🏆 Leaderboard', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+  await ctx.reply(
+    `See the top miners in the Forge network.`,
+    { reply_markup: btn('🏆 Leaderboard') }
+  )
 })
 
+// ─── /help ───────────────────────────────────────────────────────────────────
 bot.command('help', async (ctx) => {
   await ctx.reply(
-    `Forge Commands:\n\n/start — Launch\n/mine — Mining\n/balance — Balance\n/refer — Referrals\n/store — Store\n/upgrade — Upgrades\n/halving — Halving\n/leaderboard — Top miners\n/help — This`, {
-    reply_markup: new InlineKeyboard()
-      .webApp('⛏ Open Forge', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-  })
+    `Forge Commands:\n\n` +
+    `/start — Launch the app\n` +
+    `/mine — Start mining\n` +
+    `/balance — Your FRG balance\n` +
+    `/refer — Referral link\n` +
+    `/store — Store & purchases\n` +
+    `/upgrade — Mining upgrades\n` +
+    `/halving — Halving status\n` +
+    `/leaderboard — Top miners\n` +
+    `/help — This message\n\n` +
+    `Early miners earn the most. Start now.`,
+    { reply_markup: btn('⛏ Open Forge') }
+  )
 })
 
-// ─── Inline query ─────────────────────────────────────────────────────────────
+// ─── Inline query — share from any chat ──────────────────────────────────────
 bot.on('inline_query', async (ctx) => {
   await ctx.answerInlineQuery([{
     type: 'article',
@@ -147,19 +124,20 @@ bot.on('inline_query', async (ctx) => {
     title: '⛏ Invite to Forge — earn 10% of their mining',
     description: 'Share your referral and earn forever',
     input_message_content: {
-      message_text: `⛏ Join me on FORGE\n\nMine FRG for free. Early miners earn the most.\n\nTap to launch:`,
+      message_text:
+        `⛏ Join me on FORGE\n\n` +
+        `Mine FRG for free. Early miners earn the most before the next halving.\n\nTap to launch:`,
     },
-    reply_markup: new InlineKeyboard()
-      .webApp('⛏ Launch Forge', APP_URL)
-      .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`),
+    reply_markup: btn('⛏ Launch Forge'),
   }], { cache_time: 0 })
 })
 
-// ─── Stars ────────────────────────────────────────────────────────────────────
+// ─── Stars pre-checkout ───────────────────────────────────────────────────────
 bot.on('pre_checkout_query', async (ctx) => {
   await ctx.answerPreCheckoutQuery(true)
 })
 
+// ─── Stars successful payment ─────────────────────────────────────────────────
 bot.on('message:successful_payment', async (ctx) => {
   const payment = ctx.message.successful_payment
   let itemId = 'item'
@@ -169,21 +147,21 @@ bot.on('message:successful_payment', async (ctx) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: { from: { id: ctx.from.id }, successful_payment: payment } }),
-    }).catch(e => console.error('Stars relay error:', e.message))
+    }).catch(e => console.error('Stars relay:', e.message))
   }
-  await ctx.reply(`Payment received! ${itemId} is now active.`, {
-    reply_markup: new InlineKeyboard().webApp('⛏ Open Forge', APP_URL)
-  })
+  await ctx.reply(
+    `Payment received! ${itemId} is now active on your account.`,
+    { reply_markup: btn('⛏ Open Forge') }
+  )
 })
 
 // ─── Any other message ────────────────────────────────────────────────────────
 bot.on('message', async (ctx) => {
   if (ctx.message?.text && !ctx.message.text.startsWith('/')) {
-    await ctx.reply(`Tap below to open Forge. Type /help for all commands.`, {
-      reply_markup: new InlineKeyboard()
-        .webApp('⛏ Open Forge', APP_URL)
-        .row().url('🔗 Open via link', `https://t.me/${BOT_NAME}`)
-    })
+    await ctx.reply(
+      `Tap below to open Forge. Type /help for all commands.`,
+      { reply_markup: btn('⛏ Open Forge') }
+    )
   }
 })
 
@@ -206,7 +184,7 @@ async function start() {
   ])
   console.log('✅ Commands set')
 
-  // Menu button — persistent button at bottom of every chat
+  // Menu button at bottom of chat — also uses t.me link for consistency
   await bot.api.setChatMenuButton({
     menu_button: {
       type: 'web_app',
