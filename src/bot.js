@@ -1,21 +1,34 @@
 // src/bot.js — Forge Telegram Bot
-// Deploy on Render as BACKGROUND WORKER (not Web Service) — no port needed
+// Runs as a Web Service on Render free tier.
+// Opens a minimal HTTP server on PORT so Render doesn't kill it,
+// while the bot runs via long polling in the background.
+
 import { Bot, InlineKeyboard } from 'grammy'
+import { createServer } from 'http'
 import 'dotenv/config'
 
-// ─── Config — hardcoded so nothing can go wrong ───────────────────────────────
-const BOT_TOKEN  = process.env.BOT_TOKEN  || '8629852173:AAEYP-nf_XZYCs7oKKm-gFayUqZIiIBA2KM'
-const BOT_NAME   = 'Forgeminebot'
-const APP_URL    = process.env.MINI_APP_URL || 'https://YOUR_FRONTEND_URL_HERE.com'
-const API_URL    = process.env.API_URL      || ''
+// ─── Config ───────────────────────────────────────────────────────────────────
+const BOT_TOKEN = process.env.BOT_TOKEN  || '8629852173:AAEYP-nf_XZYCs7oKKm-gFayUqZIiIBA2KM'
+const BOT_NAME  = 'Forgeminebot'
+const APP_URL   = process.env.MINI_APP_URL || 'https://glowing-sundae-ed61bd.netlify.app/'
+const API_URL   = process.env.API_URL      || ''
+const PORT      = parseInt(process.env.PORT || '3000')
 
 const bot = new Bot(BOT_TOKEN)
 
+// ─── Minimal HTTP server — keeps Render Web Service alive ─────────────────────
+// Render requires at least one open port. This tiny server satisfies that.
+// It also acts as a health-check endpoint.
+const server = createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' })
+  res.end('Forge Bot is running.')
+})
+server.listen(PORT, () => {
+  console.log(`HTTP health-check server listening on port ${PORT}`)
+})
+
 // ─── Launch button — opens Mini App fullscreen ────────────────────────────────
-// InlineKeyboard.webApp() is the ONLY way to guarantee fullscreen.
-// The user taps it → Telegram opens the Mini App in fullscreen automatically.
-// No card. No "Open" prompt. Direct fullscreen.
-function launchBtn(text = '⛏ Open Forge', startParam = '') {
+function launchBtn(text = 'Open Forge', startParam = '') {
   const url = startParam
     ? `${APP_URL}?startapp=${encodeURIComponent(startParam)}`
     : APP_URL
@@ -119,26 +132,23 @@ bot.on('inline_query', async (ctx) => {
       input_message_content: {
         message_text:
           `⛏ Join me on FORGE\n\n` +
-          `Mine FRG tokens for free. Early miners earn the most.\n\n` +
-          `Tap to launch:`,
+          `Mine FRG tokens for free. Early miners earn the most.\n\nTap to launch:`,
       },
       reply_markup: launchBtn('⛏ Launch Forge'),
     },
   ], { cache_time: 0 })
 })
 
-// ─── Stars payment — pre-approve ─────────────────────────────────────────────
+// ─── Stars — pre-approve ──────────────────────────────────────────────────────
 bot.on('pre_checkout_query', async (ctx) => {
   await ctx.answerPreCheckoutQuery(true)
 })
 
-// ─── Stars payment — successful ───────────────────────────────────────────────
+// ─── Stars — successful payment ───────────────────────────────────────────────
 bot.on('message:successful_payment', async (ctx) => {
   const payment = ctx.message.successful_payment
   let itemId = 'item'
   try { itemId = JSON.parse(payment.invoice_payload || '{}').itemId || 'item' } catch {}
-
-  // Forward to backend if API_URL is set
   if (API_URL) {
     fetch(`${API_URL}/api/store/stars-webhook`, {
       method: 'POST',
@@ -148,14 +158,13 @@ bot.on('message:successful_payment', async (ctx) => {
       }),
     }).catch(e => console.error('Stars relay error:', e.message))
   }
-
   await ctx.reply(
     `Payment received! ${itemId} is now active on your account.`,
     { reply_markup: launchBtn('⛏ Open Forge') }
   )
 })
 
-// ─── Any other message → show launch button ───────────────────────────────────
+// ─── Any other message ────────────────────────────────────────────────────────
 bot.on('message', async (ctx) => {
   if (ctx.message?.text && !ctx.message.text.startsWith('/')) {
     await ctx.reply(
@@ -165,17 +174,14 @@ bot.on('message', async (ctx) => {
   }
 })
 
-// ─── Global error handler ─────────────────────────────────────────────────────
+// ─── Error handler ────────────────────────────────────────────────────────────
 bot.catch((err) => {
-  console.error('Bot error on update', err.ctx?.update?.update_id, ':', err.error?.message || err.error)
+  console.error('Bot error:', err.error?.message || err.error)
 })
 
-// ─── Startup ──────────────────────────────────────────────────────────────────
+// ─── Start polling ────────────────────────────────────────────────────────────
 async function start() {
-  // Delete any stale webhook — polling mode doesn't need one
   await bot.api.deleteWebhook({ drop_pending_updates: true })
-
-  // Commands menu in Telegram
   await bot.api.setMyCommands([
     { command: 'start',       description: '⛏ Launch Forge mining app' },
     { command: 'mine',        description: '🔄 Start mining FRG' },
@@ -189,7 +195,6 @@ async function start() {
   ])
   console.log('✅ Commands set')
 
-  // Menu button — persistent button in every chat that opens the app fullscreen
   await bot.api.setChatMenuButton({
     menu_button: {
       type: 'web_app',
@@ -197,16 +202,15 @@ async function start() {
       web_app: { url: APP_URL },
     },
   })
-  console.log('✅ Menu button → WebApp fullscreen')
+  console.log('✅ Menu button set → fullscreen WebApp')
 
-  // Long polling — no port, no HTTP server, works on Render Background Worker
-  await bot.start({
-    onStart: (info) => console.log(`✅ @${info.username} is running (polling)`),
+  bot.start({
+    onStart: (info) => console.log(`✅ @${info.username} polling started`),
     allowed_updates: ['message', 'inline_query', 'pre_checkout_query'],
   })
 }
 
 start().catch(err => {
-  console.error('Fatal startup error:', err)
+  console.error('Fatal:', err)
   process.exit(1)
 })
